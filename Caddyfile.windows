@@ -1,0 +1,47 @@
+# C.F.M.C — Can't Find My Chat
+# Caddyfile for Windows 11 (public / LAN access)
+#
+# This lets OTHER PEOPLE reach your chat from anywhere. It does two jobs:
+#   1. Serves the Next.js app (port 3000) on port 80.
+#   2. Routes ?XTransformPort=3003 to the encrypted relay (port 3003),
+#      so a remote browser's websocket traffic reaches the relay without
+#      exposing port 3003 directly to the internet.
+#
+# Usage on Windows 11:
+#   1. Download caddy.exe from https://caddyserver.com/download (Windows amd64)
+#      and put it in this project folder (or somewhere in your PATH).
+#   2. Make sure the Next.js app is running:  bun run dev   (serves :3000,
+#      and starts the relay on :3003 automatically).
+#   3. In a second terminal, run:
+#        caddy run --config Caddyfile.windows
+#   4. Open http://localhost  (or share your public IP / use ngrok, see below).
+#
+# To let ANYONE IN THE WORLD reach it, expose port 80 via either:
+#   - Port-forwarding port 80 on your router to this PC, OR
+#   - A tunnel:  ngrok http 80   (gives you a public https URL)
+
+:80 {
+	# Route socket.io / relay traffic (any request carrying XTransformPort)
+	@transform_port_query {
+		query XTransformPort=*
+	}
+
+	handle @transform_port_query {
+		reverse_proxy localhost:{query.XTransformPort} {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# Everything else -> Next.js app on port 3000
+	handle {
+		reverse_proxy localhost:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}
